@@ -125,6 +125,15 @@
                         data-label-loading="{{ t "entry.state.loading" }}"
                         >{{ icon "scraper" }}<span class="icon-label">{{ t "entry.scraper.label" }}</span></button>
                 </li>
+                <li>
+                    <button
+                        class="page-button"
+                        title="Summary"
+                        data-fetch-summary-entry="true"
+                        data-fetch-content-url="{{ route "fetchSummary" "entryID" .entry.ID }}"
+                        data-label-loading="{{ t "entry.state.loading" }}"
+                        >{{ icon "scraper" }}<span class="icon-label">Summary</span></button>
+                </li>
                 {{ if .entry.CommentsURL }}
                 <li>
                     <a href="{{ .entry.CommentsURL | safeURL }}"

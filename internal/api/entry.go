@@ -457,6 +457,69 @@ func (h *handler) fetchContent(w http.ResponseWriter, r *http.Request) {
 	json.OK(w, r, map[string]any{"content": mediaproxy.RewriteDocumentWithAbsoluteProxyURL(h.router, entry.Content), "reading_time": entry.ReadingTime})
 }
 
+func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
+	loggedUserID := request.UserID(r)
+	entryID := request.RouteInt64Param(r, "entryID")
+
+	entryBuilder := h.store.NewEntryQueryBuilder(loggedUserID)
+	entryBuilder.WithEntryID(entryID)
+	entryBuilder.WithoutStatus(model.EntryStatusRemoved)
+
+	entry, err := entryBuilder.GetEntry()
+	if err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
+	if entry == nil {
+		json.NotFound(w, r)
+		return
+	}
+
+	user, err := h.store.UserByID(loggedUserID)
+	if err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
+	if user == nil {
+		json.NotFound(w, r)
+		return
+	}
+
+	feedBuilder := storage.NewFeedQueryBuilder(h.store, loggedUserID)
+	feedBuilder.WithFeedID(entry.FeedID)
+	feed, err := feedBuilder.GetFeed()
+	if err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
+	if feed == nil {
+		json.NotFound(w, r)
+		return
+	}
+
+	if err := processor.SummarizeContent(feed, entry, user); err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
+	// shouldUpdateContent := request.QueryBoolParam(r, "update_content", true)
+	// if shouldUpdateContent {
+	if err := h.store.UpdateEntryTitleAndContent(entry); err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
+	json.OK(w, r, map[string]any{"content": mediaproxy.RewriteDocumentWithRelativeProxyURL(h.router, entry.Content), "reading_time": entry.ReadingTime})
+
+	return
+	// }
+
+	//json.OK(w, r, map[string]string{"content": entry.Content})
+}
+
 func (h *handler) flushHistory(w http.ResponseWriter, r *http.Request) {
 	loggedUserID := request.UserID(r)
 	go h.store.FlushHistory(loggedUserID)

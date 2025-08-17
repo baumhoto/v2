@@ -764,6 +764,35 @@ function handleFetchOriginalContentAction() {
     });
 }
 
+
+/**
+ * Handle fetching the summary of the content of an entry.
+ *
+ * @returns {void}
+ */
+function handleFetchSummaryContentAction() {
+    if (isListView()) return;
+
+    const buttonElement = document.querySelector(":is(a, button)[data-fetch-summary-entry]");
+    if (!buttonElement) return;
+
+    const originalButtonElement = setButtonToLoadingState(buttonElement);
+
+    sendPOSTRequest(buttonElement.dataset.fetchContentUrl).then((response) => {
+        restoreButtonState(buttonElement, originalButtonElement);
+
+        response.json().then((data) => {
+            if (data.content && data.reading_time) {
+                document.querySelector(".entry-content").innerHTML = ttpolicy.createHTML(data.content);
+                const entryReadingtimeElement = document.querySelector(".entry-reading-time");
+                if (entryReadingtimeElement) {
+                    entryReadingtimeElement.textContent = data.reading_time;
+                }
+            }
+        });
+    });
+}
+
 /**
  * Open the original link of an entry.
  *
@@ -1237,6 +1266,7 @@ function initializeClickHandlers() {
     onClick(":is(a, button)[data-toggle-starred]", (event) => handleStarAction(event.target));
     onClick(":is(a, button)[data-toggle-status]", (event) => handleEntryStatus("next", event.target));
     onClick(":is(a, button)[data-fetch-content-entry]", handleFetchOriginalContentAction);
+    onClick(":is(a, button)[data-fetch-summary-entry]", handleFetchSummaryContentAction);
     onClick(":is(a, button)[data-share-status]", handleEntryShareAction);
 
     // Page actions with confirmation

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"miniflux.app/v2/internal/config"
+	"miniflux.app/v2/internal/integration/openai"
 	"miniflux.app/v2/internal/metric"
 	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/proxyrotator"
@@ -202,6 +203,70 @@ func ProcessEntryWebPage(feed *model.Feed, entry *model.Entry, user *model.User)
 
 	rewrite.ApplyContentRewriteRules(entry, entry.Feed.RewriteRules)
 	entry.Content = sanitizer.SanitizeHTML(webpageBaseURL, entry.Content, &sanitizer.SanitizerOptions{OpenLinksInNewTab: user.OpenExternalLinksInNewTab})
+
+	return nil
+}
+
+// create summary for entry.Content via openai
+func SummarizeContent(feed *model.Feed, entry *model.Entry, user *model.User) error {
+	openAIClient := openai.NewClient("OPENAI_APIKEY")
+	summary, err := openAIClient.CreateChatCompletion(entry.Content)
+	if err != nil {
+		return err
+	}
+
+	if summary != "" {
+		entry.Content = minifyContent(summary)
+		if user.ShowReadingTime {
+			entry.ReadingTime = readingtime.EstimateReadingTime(entry.Content, user.DefaultReadingSpeed, user.CJKReadingSpeed)
+		}
+	}
+
+	// slog.Warn("Summary",
+	// 	slog.Int64("user_id", user.ID),
+	// 	slog.String("entry_url", entry.URL),
+	// 	slog.Int64("feed_id", feed.ID),
+	// 	slog.String("summary", entry.Content),
+	// 	slog.Any("error", err),
+	// )
+
+	// requestBuilder := fetcher.NewRequestBuilder()
+	// requestBuilder.WithUserAgent(feed.UserAgent, config.Opts.HTTPClientUserAgent())
+	// requestBuilder.WithCookie(feed.Cookie)
+	// requestBuilder.WithTimeout(config.Opts.HTTPClientTimeout())
+	// requestBuilder.WithProxyRotator(proxyrotator.ProxyRotatorInstance)
+	// requestBuilder.WithCustomFeedProxyURL(feed.ProxyURL)
+	// requestBuilder.WithCustomApplicationProxyURL(config.Opts.HTTPClientProxyURL())
+	// requestBuilder.UseCustomApplicationProxyURL(feed.FetchViaProxy)
+	// requestBuilder.IgnoreTLSErrors(feed.AllowSelfSignedCertificates)
+	// requestBuilder.DisableHTTP2(feed.DisableHTTP2)
+
+	// webpageBaseURL, extractedContent, scraperErr := scraper.ScrapeWebsite(
+	// 	requestBuilder,
+	// 	entry.URL,
+	// 	feed.ScraperRules,
+	// )
+
+	// if config.Opts.HasMetricsCollector() {
+	// 	status := "success"
+	// 	if scraperErr != nil {
+	// 		status = "error"
+	// 	}
+	// 	metric.ScraperRequestDuration.WithLabelValues(status).Observe(time.Since(startTime).Seconds())
+	// }
+
+	// if scraperErr != nil {
+	// 	return scraperErr
+	// }
+
+	// if extractedContent != "" {
+	// 	entry.Content = minifyContent(extractedContent)
+	// 	if user.ShowReadingTime {
+	// 		entry.ReadingTime = readingtime.EstimateReadingTime(entry.Content, user.DefaultReadingSpeed, user.CJKReadingSpeed)
+	// }
+	// }
+
+	// entry.Content = sanitizer.SanitizeHTML(webpageBaseURL, entry.Content, &sanitizer.SanitizerOptions{OpenLinksInNewTab: user.OpenExternalLinksInNewTab})
 
 	return nil
 }
