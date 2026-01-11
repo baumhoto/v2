@@ -81,6 +81,16 @@
                     data-comments-link="true">{{ icon "comment" }}<span class="icon-label">{{ t "entry.comments.label" }}</span></a>
             </li>
         {{ end -}}
+         <li class="item-meta-icons-delete">
+                <button
+                    aria-describedby="entry-title-{{ .entry.ID }}"
+                    data-confirm="true"
+                    data-url="{{ route "unshareEntry" "entryID" .entry.ID }}"
+                    data-label-question="{{ t "confirm.question" }}"
+                    data-label-yes="{{ t "confirm.yes" }}"
+                    data-label-no="{{ t "confirm.no" }}"
+                    data-label-loading="{{ t "confirm.loading" }}">{{ icon "delete" }}<span class="icon-label">{{ t "entry.unshare.label" }}</span></button>
+            </li>
     </ul>
 </div>
 {{ end }}

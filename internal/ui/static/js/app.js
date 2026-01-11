@@ -783,6 +783,7 @@ function handleFetchSummaryContentAction() {
 
         response.json().then((data) => {
             if (data.content && data.reading_time) {
+                const ttpolicy = trustedTypes.createPolicy('html', {createHTML: html => html});
                 document.querySelector(".entry-content").innerHTML = ttpolicy.createHTML(data.content);
                 const entryReadingtimeElement = document.querySelector(".entry-reading-time");
                 if (entryReadingtimeElement) {

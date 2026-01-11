@@ -505,8 +505,8 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// shouldUpdateContent := request.QueryBoolParam(r, "update_content", true)
-	// if shouldUpdateContent {
+	shouldUpdateContent := request.QueryBoolParam(r, "update_content", false)
+	if shouldUpdateContent {
 	if err := h.store.UpdateEntryTitleAndContent(entry); err != nil {
 		json.ServerError(w, r, err)
 		return
@@ -515,9 +515,9 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 	json.OK(w, r, map[string]any{"content": mediaproxy.RewriteDocumentWithRelativeProxyURL(h.router, entry.Content), "reading_time": entry.ReadingTime})
 
 	return
-	// }
+	}
 
-	//json.OK(w, r, map[string]string{"content": entry.Content})
+	json.OK(w, r, map[string]string{"content": entry.Content})
 }
 
 func (h *handler) flushHistory(w http.ResponseWriter, r *http.Request) {

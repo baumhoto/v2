@@ -230,43 +230,7 @@ func SummarizeContent(feed *model.Feed, entry *model.Entry, user *model.User) er
 	// 	slog.Any("error", err),
 	// )
 
-	// requestBuilder := fetcher.NewRequestBuilder()
-	// requestBuilder.WithUserAgent(feed.UserAgent, config.Opts.HTTPClientUserAgent())
-	// requestBuilder.WithCookie(feed.Cookie)
-	// requestBuilder.WithTimeout(config.Opts.HTTPClientTimeout())
-	// requestBuilder.WithProxyRotator(proxyrotator.ProxyRotatorInstance)
-	// requestBuilder.WithCustomFeedProxyURL(feed.ProxyURL)
-	// requestBuilder.WithCustomApplicationProxyURL(config.Opts.HTTPClientProxyURL())
-	// requestBuilder.UseCustomApplicationProxyURL(feed.FetchViaProxy)
-	// requestBuilder.IgnoreTLSErrors(feed.AllowSelfSignedCertificates)
-	// requestBuilder.DisableHTTP2(feed.DisableHTTP2)
-
-	// webpageBaseURL, extractedContent, scraperErr := scraper.ScrapeWebsite(
-	// 	requestBuilder,
-	// 	entry.URL,
-	// 	feed.ScraperRules,
-	// )
-
-	// if config.Opts.HasMetricsCollector() {
-	// 	status := "success"
-	// 	if scraperErr != nil {
-	// 		status = "error"
-	// 	}
-	// 	metric.ScraperRequestDuration.WithLabelValues(status).Observe(time.Since(startTime).Seconds())
-	// }
-
-	// if scraperErr != nil {
-	// 	return scraperErr
-	// }
-
-	// if extractedContent != "" {
-	// 	entry.Content = minifyContent(extractedContent)
-	// 	if user.ShowReadingTime {
-	// 		entry.ReadingTime = readingtime.EstimateReadingTime(entry.Content, user.DefaultReadingSpeed, user.CJKReadingSpeed)
-	// }
-	// }
-
-	// entry.Content = sanitizer.SanitizeHTML(webpageBaseURL, entry.Content, &sanitizer.SanitizerOptions{OpenLinksInNewTab: user.OpenExternalLinksInNewTab})
+	entry.Content = sanitizer.SanitizeHTML(entry.URL, entry.Content, &sanitizer.SanitizerOptions{OpenLinksInNewTab: user.OpenExternalLinksInNewTab})
 
 	return nil
 }
