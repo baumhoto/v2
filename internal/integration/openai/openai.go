@@ -24,8 +24,9 @@ func NewClient(apiKey string) *Client {
 }
 
 type ChatCompletionRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model     string    `json:"model"`
+	Messages  []Message `json:"messages,omitempty"`
+	Reasoning string    `json:"reasoning_effort,omitempty"`
 }
 
 type Message struct {
@@ -50,8 +51,9 @@ func (c *Client) CreateChatCompletion(articleText string) (string, error) {
 	}
 
 	requestBody := &ChatCompletionRequest{
-		Model:    "gpt-5-nano",
-		Messages: messages,
+		Model:     "gpt-5-nano",
+		Reasoning: "minimal",
+		Messages:  messages,
 	}
 
 	requestBodyJson, err := json.Marshal(requestBody)
