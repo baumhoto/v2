@@ -127,4 +127,9 @@ type Integration struct {
 	PushoverDevice                   string
 	PushoverPrefix                   string
 	ArchiveorgEnabled                bool
+	OpenaiEnabled                    bool
+	OpenaiAPIKey                     string
+	OpenaiModel                      string
+	OpenaiReasoningEffort            string
+	OpenaiSystemPrompt               string
 }

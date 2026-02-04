@@ -98,6 +98,12 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	integration, err := h.store.Integration(loggedUserID)
+	if err != nil {
+		json.ServerError(w, r, err)
+		return
+	}
+
 	feedBuilder := storage.NewFeedQueryBuilder(h.store, loggedUserID)
 	feedBuilder.WithFeedID(entry.FeedID)
 	feed, err := feedBuilder.GetFeed()
@@ -111,7 +117,7 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := processor.SummarizeContent(feed, entry, user); err != nil {
+	if err := processor.SummarizeContent(feed, entry, user, integration); err != nil {
 		json.ServerError(w, r, err)
 		return
 	}

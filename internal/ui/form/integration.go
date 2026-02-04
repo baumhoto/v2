@@ -133,6 +133,11 @@ type IntegrationForm struct {
 	PushoverDevice                   string
 	PushoverPrefix                   string
 	ArchiveorgEnabled                bool
+	OpenaiEnabled                    bool
+	OpenaiAPIKey                     string
+	OpenaiModel                      string
+	OpenaiReasoningEffort            string
+	OpenaiSystemPrompt               string
 }
 
 // Merge copy form values to the model.
@@ -255,6 +260,11 @@ func (i IntegrationForm) Merge(integration *model.Integration) {
 	integration.PushoverDevice = i.PushoverDevice
 	integration.PushoverPrefix = i.PushoverPrefix
 	integration.ArchiveorgEnabled = i.ArchiveorgEnabled
+	integration.OpenaiEnabled = i.OpenaiEnabled
+	integration.OpenaiAPIKey = i.OpenaiAPIKey
+	integration.OpenaiModel = i.OpenaiModel
+	integration.OpenaiReasoningEffort = i.OpenaiReasoningEffort
+	integration.OpenaiSystemPrompt = i.OpenaiSystemPrompt
 }
 
 // NewIntegrationForm returns a new IntegrationForm.
@@ -380,6 +390,11 @@ func NewIntegrationForm(r *http.Request) *IntegrationForm {
 		PushoverDevice:                   r.FormValue("pushover_device"),
 		PushoverPrefix:                   r.FormValue("pushover_prefix"),
 		ArchiveorgEnabled:                r.FormValue("archiveorg_enabled") == "1",
+		OpenaiEnabled:                    r.FormValue("openai_enabled") == "1",
+		OpenaiAPIKey:                     r.FormValue("openai_api_key"),
+		OpenaiModel:                      r.FormValue("openai_model"),
+		OpenaiReasoningEffort:            r.FormValue("openai_reasoning_effort"),
+		OpenaiSystemPrompt:               r.FormValue("openai_system_prompt"),
 	}
 }
 

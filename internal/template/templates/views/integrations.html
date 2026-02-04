@@ -410,6 +410,44 @@
         </div>
     </details>
 
+    <details {{ if .form.OpenaiEnabled }}open{{ end }}>
+        <summary>OpenAI</summary>
+        <div class="form-section">
+            <label>
+                <input type="checkbox" name="openai_enabled" value="1" {{ if .form.OpenaiEnabled }}checked{{ end }}> {{ t "form.integration.openai_activate" }}
+            </label>
+
+            <label for="form-openai-api-key">{{ t "form.integration.openai_api_key" }}</label>
+            <input type="password" name="openai_api_key" id="form-openai-api-key" value="{{ .form.OpenaiAPIKey }}" spellcheck="false">
+            <p class="hint">{{ t "form.integration.openai_api_key_hint" }}</p>
+
+            <label for="form-openai-model">{{ t "form.integration.openai_model" }}</label>
+            <select name="openai_model" id="form-openai-model">
+                <option value="gpt-4o" {{ if eq .form.OpenaiModel "gpt-4o" }}selected{{ end }}>gpt-4o</option>
+                <option value="gpt-4o-mini" {{ if eq .form.OpenaiModel "gpt-4o-mini" }}selected{{ end }}>gpt-4o-mini</option>
+                <option value="gpt-5-nano" {{ if eq .form.OpenaiModel "gpt-5-nano" }}selected{{ end }}>gpt-5-nano</option>
+            </select>
+
+            <label for="form-openai-reasoning-effort">{{ t "form.integration.openai_reasoning_effort" }}</label>
+            <select name="openai_reasoning_effort" id="form-openai-reasoning-effort">
+                <option value="none" {{ if eq .form.OpenaiReasoningEffort "none" }}selected{{ end }}>none</option>
+                <option value="minimal" {{ if eq .form.OpenaiReasoningEffort "minimal" }}selected{{ end }}>minimal</option>
+                <option value="low" {{ if eq .form.OpenaiReasoningEffort "low" }}selected{{ end }}>low</option>
+                <option value="medium" {{ if eq .form.OpenaiReasoningEffort "medium" }}selected{{ end }}>medium</option>
+                <option value="high" {{ if eq .form.OpenaiReasoningEffort "high" }}selected{{ end }}>high</option>
+                <option value="xhigh" {{ if eq .form.OpenaiReasoningEffort "xhigh" }}selected{{ end }}>xhigh</option>
+            </select>
+
+            <label for="form-openai-system-prompt">{{ t "form.integration.openai_system_prompt" }}</label>
+            <textarea name="openai_system_prompt" id="form-openai-system-prompt" rows="5" spellcheck="false">{{ .form.OpenaiSystemPrompt }}</textarea>
+            <p class="hint">{{ t "form.integration.openai_system_prompt_hint" }}</p>
+
+            <div class="buttons">
+                <button type="submit" class="button button-primary" data-label-loading="{{ t "form.submit.saving" }}">{{ t "action.update" }}</button>
+            </div>
+        </div>
+    </details>
+
     <details {{ if .form.KarakeepEnabled }}open{{ end }}>
         <summary>Karakeep</summary>
         <div class="form-section">

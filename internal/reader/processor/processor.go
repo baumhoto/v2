@@ -4,6 +4,7 @@
 package processor // import "miniflux.app/v2/internal/reader/processor"
 
 import (
+	"fmt"
 	"log/slog"
 	"net/url"
 	"slices"
@@ -207,9 +208,21 @@ func ProcessEntryWebPage(feed *model.Feed, entry *model.Entry, user *model.User)
 	return nil
 }
 
-// create summary for entry.Content via openai
-func SummarizeContent(feed *model.Feed, entry *model.Entry, user *model.User) error {
-	openAIClient := openai.NewClient("OPENAI_APIKEY")
+// SummarizeContent creates a summary for entry.Content via OpenAI.
+func SummarizeContent(feed *model.Feed, entry *model.Entry, user *model.User, integration *model.Integration) error {
+	if integration == nil || !integration.OpenaiEnabled {
+		return fmt.Errorf("openai: integration is not enabled")
+	}
+	if integration.OpenaiAPIKey == "" {
+		return fmt.Errorf("openai: missing api key")
+	}
+
+	openAIClient := openai.NewClient(
+		integration.OpenaiAPIKey,
+		integration.OpenaiModel,
+		integration.OpenaiReasoningEffort,
+		integration.OpenaiSystemPrompt,
+	)
 	summary, err := openAIClient.CreateChatCompletion(entry.Content)
 	if err != nil {
 		return err
@@ -221,14 +234,6 @@ func SummarizeContent(feed *model.Feed, entry *model.Entry, user *model.User) er
 			entry.ReadingTime = readingtime.EstimateReadingTime(entry.Content, user.DefaultReadingSpeed, user.CJKReadingSpeed)
 		}
 	}
-
-	// slog.Warn("Summary",
-	// 	slog.Int64("user_id", user.ID),
-	// 	slog.String("entry_url", entry.URL),
-	// 	slog.Int64("feed_id", feed.ID),
-	// 	slog.String("summary", entry.Content),
-	// 	slog.Any("error", err),
-	// )
 
 	entry.Content = sanitizer.SanitizeHTML(entry.URL, entry.Content, &sanitizer.SanitizerOptions{OpenLinksInNewTab: user.OpenExternalLinksInNewTab})
 

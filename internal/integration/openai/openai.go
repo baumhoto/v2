@@ -13,25 +13,52 @@ import (
 	"miniflux.app/v2/internal/version"
 )
 
-const defaultClientTimeout = 30 * time.Second
+const (
+	defaultClientTimeout       = 60 * time.Second
+	defaultModel               = "gpt-4o"
+	defaultReasoningEffort     = "medium"
+	defaultSystemPrompt        = "You are an assistant that summarizes articles. Summarize the text in one sentence focusing only on the main point followed by a list of key points separated by an empty line. Format the summary as HTML. If the article is written in English, summarize it in English. If it is written in any other language, summarize it in German."
+)
 
 type Client struct {
-	apiKey string
+	apiKey          string
+	model           string
+	reasoningEffort string
+	systemPrompt    string
 }
 
-func NewClient(apiKey string) *Client {
-	return &Client{apiKey: apiKey}
+func NewClient(apiKey, model, reasoningEffort, systemPrompt string) *Client {
+	if model == "" {
+		model = defaultModel
+	}
+	if reasoningEffort == "" {
+		reasoningEffort = defaultReasoningEffort
+	}
+	if systemPrompt == "" {
+		systemPrompt = defaultSystemPrompt
+	}
+	return &Client{
+		apiKey:          apiKey,
+		model:           model,
+		reasoningEffort: reasoningEffort,
+		systemPrompt:    systemPrompt,
+	}
 }
 
-type ChatCompletionRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages,omitempty"`
-	Reasoning string    `json:"reasoning_effort,omitempty"`
+type ResponsesRequest struct {
+	Model        string      `json:"model"`
+	Input        []InputItem `json:"input"`
+	Instructions string      `json:"instructions,omitempty"`
+	Reasoning    *Reasoning  `json:"reasoning,omitempty"`
 }
 
-type Message struct {
+type InputItem struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+type Reasoning struct {
+	Effort string `json:"effort"`
 }
 
 func (c *Client) CreateChatCompletion(articleText string) (string, error) {
@@ -39,21 +66,23 @@ func (c *Client) CreateChatCompletion(articleText string) (string, error) {
 		return "", fmt.Errorf("openai: missing api key")
 	}
 
-	messages := []Message{
-		{
-			Role:    "system",
-			Content: "you are an assistant that summarizes articles. Summarize the text in one sentence focusing only on the main point followed by a list of keypoints separated by an empty line. Format the summary as html. if the article is written in English summarize it in English. if it is written in any other language summarize it in German.",
-		},
+	input := []InputItem{
 		{
 			Role:    "user",
 			Content: articleText,
 		},
 	}
 
-	requestBody := &ChatCompletionRequest{
-		Model:     "gpt-5-nano",
-		Reasoning: "minimal",
-		Messages:  messages,
+	requestBody := &ResponsesRequest{
+		Model:        c.model,
+		Input:        input,
+		Instructions: c.systemPrompt,
+	}
+
+	if c.reasoningEffort != "none" {
+		requestBody.Reasoning = &Reasoning{
+			Effort: c.reasoningEffort,
+		}
 	}
 
 	requestBodyJson, err := json.Marshal(requestBody)
@@ -61,7 +90,7 @@ func (c *Client) CreateChatCompletion(articleText string) (string, error) {
 		return "", fmt.Errorf("openai: unable to encode request body: %v", err)
 	}
 
-	request, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions", bytes.NewReader(requestBodyJson))
+	request, err := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/responses", bytes.NewReader(requestBodyJson))
 	if err != nil {
 		return "", fmt.Errorf("openai: unable to create request: %v", err)
 	}
@@ -77,25 +106,33 @@ func (c *Client) CreateChatCompletion(articleText string) (string, error) {
 	defer response.Body.Close()
 
 	if response.StatusCode >= 400 {
-		return "", fmt.Errorf("openai: unable to create chat completion: status=%d", response.StatusCode)
+		return "", fmt.Errorf("openai: unable to create response: status=%d", response.StatusCode)
 	}
 
-	var chatCompletionResponse struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	var responsesResponse struct {
+		Output []struct {
+			Type    string `json:"type"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"output"`
 	}
 
-	err = json.NewDecoder(response.Body).Decode(&chatCompletionResponse)
+	err = json.NewDecoder(response.Body).Decode(&responsesResponse)
 	if err != nil {
 		return "", fmt.Errorf("openai: unable to decode response body: %v", err)
 	}
 
-	if len(chatCompletionResponse.Choices) > 0 {
-		return chatCompletionResponse.Choices[0].Message.Content, nil
+	for _, output := range responsesResponse.Output {
+		if output.Type == "message" {
+			for _, content := range output.Content {
+				if content.Type == "output_text" {
+					return content.Text, nil
+				}
+			}
+		}
 	}
 
-	return "", fmt.Errorf("openai: no choices returned")
+	return "", fmt.Errorf("openai: no output returned")
 }

@@ -146,6 +146,11 @@ func (h *handler) showIntegrationPage(w http.ResponseWriter, r *http.Request) {
 		PushoverDevice:                   integration.PushoverDevice,
 		PushoverPrefix:                   integration.PushoverPrefix,
 		ArchiveorgEnabled:                integration.ArchiveorgEnabled,
+		OpenaiEnabled:                    integration.OpenaiEnabled,
+		OpenaiAPIKey:                     integration.OpenaiAPIKey,
+		OpenaiModel:                      integration.OpenaiModel,
+		OpenaiReasoningEffort:            integration.OpenaiReasoningEffort,
+		OpenaiSystemPrompt:               integration.OpenaiSystemPrompt,
 	}
 
 	sess := session.New(h.store, request.SessionID(r))
