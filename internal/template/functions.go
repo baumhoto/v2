@@ -164,6 +164,7 @@ func (f *funcMap) Map() template.FuncMap {
 func csp(user *model.User, nonce string) string {
 	policies := map[string]string{
 		"default-src":               "'none'",
+		"font-src":                  "data:",
 		"frame-src":                 "*",
 		"img-src":                   "* data:",
 		"manifest-src":              "'self'",
@@ -177,7 +178,7 @@ func csp(user *model.User, nonce string) string {
 
 	if user != nil {
 		if user.ExternalFontHosts != "" {
-			policies["font-src"] = user.ExternalFontHosts
+			policies["font-src"] += " " + user.ExternalFontHosts
 			if user.Stylesheet != "" {
 				policies["style-src"] += " " + user.ExternalFontHosts
 			}
