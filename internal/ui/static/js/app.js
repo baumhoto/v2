@@ -13,6 +13,12 @@ if (!window.trustedTypes || !trustedTypes.createPolicy) {
     };
 }
 
+// Create Trusted Types policies once at the top level so that re-entrant
+// calls (e.g. clicking the summary button after the fetch-content button)
+// don't hit the "policy already exists" error in Safari / strict mode.
+const ttHTMLPolicy = trustedTypes.createPolicy('html', {createHTML: html => html});
+const ttURLPolicy = trustedTypes.createPolicy('url', {createScriptURL: src => src});
+
 /**
  * Send a POST request to the specified URL with the given body.
  *
@@ -752,8 +758,7 @@ function handleFetchOriginalContentAction() {
 
         response.json().then((data) => {
             if (data.content && data.reading_time) {
-                const ttpolicy = trustedTypes.createPolicy('html', {createHTML: html => html});
-                document.querySelector(".entry-content").innerHTML = ttpolicy.createHTML(data.content);
+                document.querySelector(".entry-content").innerHTML = ttHTMLPolicy.createHTML(data.content);
                 const entryReadingtimeElement = document.querySelector(".entry-reading-time");
                 if (entryReadingtimeElement) {
                     entryReadingtimeElement.textContent = data.reading_time;
@@ -782,8 +787,7 @@ function handleFetchSummaryContentAction() {
 
         response.json().then((data) => {
             if (data.content && data.reading_time) {
-                const ttpolicy = trustedTypes.createPolicy('html', {createHTML: html => html});
-                document.querySelector(".entry-content").innerHTML = ttpolicy.createHTML(data.content);
+                document.querySelector(".entry-content").innerHTML = ttHTMLPolicy.createHTML(data.content);
                 const entryReadingtimeElement = document.querySelector(".entry-reading-time");
                 if (entryReadingtimeElement) {
                     entryReadingtimeElement.textContent = data.reading_time;
@@ -1115,8 +1119,7 @@ function initializeServiceWorker() {
     if ("serviceWorker" in navigator) {
         const serviceWorkerURL = document.body.dataset.serviceWorkerUrl;
         if (serviceWorkerURL) {
-            const ttpolicy = trustedTypes.createPolicy('url', {createScriptURL: src => src});
-            navigator.serviceWorker.register(ttpolicy.createScriptURL(serviceWorkerURL), {
+            navigator.serviceWorker.register(ttURLPolicy.createScriptURL(serviceWorkerURL), {
                 type: "module"
             }).catch((error) => {
                 console.error("Service Worker registration failed:", error);
