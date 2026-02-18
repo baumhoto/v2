@@ -423,9 +423,9 @@
 
             <label for="form-openai-model">{{ t "form.integration.openai_model" }}</label>
             <select name="openai_model" id="form-openai-model">
+                <option value="gpt-5-nano" {{ if eq .form.OpenaiModel "gpt-5-nano" }}selected{{ end }}>gpt-5-nano</option>
                 <option value="gpt-4o" {{ if eq .form.OpenaiModel "gpt-4o" }}selected{{ end }}>gpt-4o</option>
                 <option value="gpt-4o-mini" {{ if eq .form.OpenaiModel "gpt-4o-mini" }}selected{{ end }}>gpt-4o-mini</option>
-                <option value="gpt-5-nano" {{ if eq .form.OpenaiModel "gpt-5-nano" }}selected{{ end }}>gpt-5-nano</option>
             </select>
 
             <label for="form-openai-reasoning-effort">{{ t "form.integration.openai_reasoning_effort" }}</label>

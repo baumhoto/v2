@@ -1408,7 +1408,7 @@ var migrations = [...]func(tx *sql.Tx) error{
 			ALTER TABLE integrations
 				ADD COLUMN openai_enabled bool default 'f',
 				ADD COLUMN openai_api_key text default '',
-				ADD COLUMN openai_model text default 'gpt-4o',
+				ADD COLUMN openai_model text default 'gpt-5-nano',
 				ADD COLUMN openai_reasoning_effort text default 'medium',
 				ADD COLUMN openai_system_prompt text default ''
 		`
