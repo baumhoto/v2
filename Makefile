@@ -16,12 +16,10 @@ export PGPASSWORD := postgres
 	linux-armv7 \
 	linux-armv6 \
 	linux-armv5 \
-	linux-x86 \
 	darwin-amd64 \
 	darwin-arm64 \
 	freebsd-amd64 \
 	openbsd-amd64 \
-	netbsd-amd64 \
 	build \
 	run \
 	clean \
@@ -100,7 +98,7 @@ test:
 
 lint:
 	go vet ./...
-	gofmt -d -e .
+	test -z "$$(gofmt -l .)"
 	golangci-lint run
 
 integration-test:
@@ -113,6 +111,8 @@ integration-test:
 	CREATE_ADMIN=1 \
 	RUN_MIGRATIONS=1 \
 	LOG_LEVEL=debug \
+	FETCHER_ALLOW_PRIVATE_NETWORKS=1 \
+	INTEGRATION_ALLOW_PRIVATE_NETWORKS=1 \
 	go run main.go >/tmp/miniflux.log 2>&1 & echo "$$!" > "/tmp/miniflux.pid"
 
 	while ! nc -z localhost 8080; do sleep 1; done
