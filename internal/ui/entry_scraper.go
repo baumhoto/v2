@@ -78,29 +78,29 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 
 	entry, err := entryBuilder.GetEntry()
 	if err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
 	if entry == nil {
-		json.NotFound(w, r)
+		response.JSONNotFound(w, r)
 		return
 	}
 
 	user, err := h.store.UserByID(loggedUserID)
 	if err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
 	if user == nil {
-		json.NotFound(w, r)
+		response.JSONNotFound(w, r)
 		return
 	}
 
 	integration, err := h.store.Integration(loggedUserID)
 	if err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
@@ -108,26 +108,26 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 	feedBuilder.WithFeedID(entry.FeedID)
 	feed, err := feedBuilder.GetFeed()
 	if err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
 	if feed == nil {
-		json.NotFound(w, r)
+		response.JSONNotFound(w, r)
 		return
 	}
 
 	if err := processor.SummarizeContent(feed, entry, user, integration); err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
 	if err := h.store.UpdateEntryTitleAndContent(entry); err != nil {
-		json.ServerError(w, r, err)
+		response.JSONServerError(w, r, err)
 		return
 	}
 
 	readingTime := locale.NewPrinter(user.Language).Plural("entry.estimated_reading_time", entry.ReadingTime, entry.ReadingTime)
 
-	json.OK(w, r, map[string]string{"content": mediaproxy.RewriteDocumentWithRelativeProxyURL(h.router, entry.Content), "reading_time": readingTime})
+	response.JSON(w, r, map[string]string{"content": mediaproxy.RewriteDocumentWithRelativeProxyURL(entry.Content), "reading_time": readingTime})
 }

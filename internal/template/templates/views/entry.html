@@ -130,7 +130,7 @@
                         class="page-button"
                         title="Summary"
                         data-fetch-summary-entry="true"
-                        data-fetch-content-url="{{ route "fetchSummary" "entryID" .entry.ID }}"
+                        data-fetch-content-url="{{ routePath "/entry/summary/%d" .entry.ID }}"
                         data-label-loading="{{ t "entry.state.loading" }}"
                         >{{ icon "scraper" }}<span class="icon-label">Summary</span></button>
                 </li>

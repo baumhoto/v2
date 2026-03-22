@@ -85,7 +85,7 @@
                 <button
                     aria-describedby="entry-title-{{ .entry.ID }}"
                     data-confirm="true"
-                    data-url="{{ route "unshareEntry" "entryID" .entry.ID }}"
+                    data-url="{{ routePath "/entry/unshare/%d" .entry.ID }}"
                     data-label-question="{{ t "confirm.question" }}"
                     data-label-yes="{{ t "confirm.yes" }}"
                     data-label-no="{{ t "confirm.no" }}"
