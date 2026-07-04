@@ -4,7 +4,7 @@
 package sanitizer // import "miniflux.app/v2/internal/reader/sanitizer"
 
 import (
-	"errors"
+	"io"
 	"net/url"
 	"slices"
 	"strconv"
@@ -15,10 +15,6 @@ import (
 	"miniflux.app/v2/internal/urllib"
 
 	"golang.org/x/net/html"
-)
-
-const (
-	maxDepth = 512 // The maximum allowed depths for nested HTML tags, same was WebKit.
 )
 
 var (
@@ -121,6 +117,7 @@ var (
 		"bandcamp.com":         {},
 		"cdn.embedly.com":      {},
 		"dailymotion.com":      {},
+		"framatube.org":        {},
 		"open.spotify.com":     {},
 		"player.bilibili.com":  {},
 		"player.twitch.tv":     {},
@@ -144,53 +141,6 @@ var (
 		"twitter.com/share",
 		"x.com/intent/tweet",
 		"x.com/share",
-	}
-
-	// See https://www.iana.org/assignments/uri-schemes/uri-schemes.xhtml
-	validURISchemes = []string{
-		// Most commong schemes on top.
-		"https:",
-		"http:",
-
-		// Then the rest.
-		"apt:",
-		"bitcoin:",
-		"callto:",
-		"dav:",
-		"davs:",
-		"ed2k:",
-		"facetime:",
-		"feed:",
-		"ftp:",
-		"geo:",
-		"git:",
-		"gopher:",
-		"irc:",
-		"irc6:",
-		"ircs:",
-		"itms-apps:",
-		"itms:",
-		"magnet:",
-		"mailto:",
-		"news:",
-		"nntp:",
-		"rtmp:",
-		"sftp:",
-		"sip:",
-		"sips:",
-		"skype:",
-		"spotify:",
-		"ssh:",
-		"steam:",
-		"svn:",
-		"svn+ssh:",
-		"tel:",
-		"webcal:",
-		"xmpp:",
-
-		// iOS Apps
-		"opener:", // https://www.opener.link
-		"hack:",   // https://apps.apple.com/it/app/hack-for-hacker-news-reader/id1464477788?l=en-GB
 	}
 
 	dataAttributeAllowedPrefixes = []string{
@@ -222,7 +172,11 @@ func SanitizeHTML(baseURL, rawHTML string, sanitizerOptions *SanitizerOptions) s
 
 	// We need to surround `rawHTML` with body tags so that html.Parse
 	// will consider it a valid html document.
-	doc, err := html.Parse(strings.NewReader("<body>" + rawHTML + "</body>"))
+	doc, err := html.Parse(io.MultiReader(
+		strings.NewReader("<body>"),
+		strings.NewReader(rawHTML),
+		strings.NewReader("</body>"),
+	))
 	if err != nil {
 		return ""
 	}
@@ -238,8 +192,7 @@ func SanitizeHTML(baseURL, rawHTML string, sanitizerOptions *SanitizerOptions) s
 	// Errors are a non-issue, so they're handled in filterAndRenderHTML
 	parsedBaseUrl, _ := url.Parse(baseURL)
 	for c := body.FirstChild; c != nil; c = c.NextSibling {
-		// -2 because of `<html><body>…`
-		if err := filterAndRenderHTML(&buffer, c, parsedBaseUrl, sanitizerOptions, maxDepth-2); err != nil {
+		if err := filterAndRenderHTML(&buffer, c, parsedBaseUrl, sanitizerOptions); err != nil {
 			return ""
 		}
 	}
@@ -265,20 +218,16 @@ func findAllowedIframeSourceDomain(iframeSourceURL string) (string, bool) {
 	return "", false
 }
 
-func filterAndRenderHTML(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.URL, sanitizerOptions *SanitizerOptions, depth uint) error {
+func filterAndRenderHTML(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.URL, sanitizerOptions *SanitizerOptions) error {
 	if n == nil {
 		return nil
-	}
-
-	if depth == 0 {
-		return errors.New("maximum nested tags limit reached")
 	}
 
 	switch n.Type {
 	case html.TextNode:
 		buf.WriteString(html.EscapeString(n.Data))
 	case html.ElementNode:
-		tag := strings.ToLower(n.Data)
+		tag := n.Data
 		if shouldIgnoreTag(n, tag) {
 			return nil
 		}
@@ -286,13 +235,17 @@ func filterAndRenderHTML(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.
 		_, ok := allowedHTMLTagsAndAttributes[tag]
 		if !ok {
 			// The tag isn't allowed, but we're still interested in its content
-			return filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions, depth-1)
+			return filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions)
 		}
 
 		htmlAttributes, hasAllRequiredAttributes := sanitizeAttributes(parsedBaseUrl, tag, n.Attr, sanitizerOptions)
 		if !hasAllRequiredAttributes {
+			if tag == "iframe" {
+				// A blocked iframe should not have its inner content rendered.
+				return nil
+			}
 			// The tag doesn't have every required attributes but we're still interested in its content
-			return filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions, depth-1)
+			return filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions)
 		}
 		buf.WriteByte('<')
 		buf.WriteString(n.Data)
@@ -308,7 +261,7 @@ func filterAndRenderHTML(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.
 
 		if tag != "iframe" {
 			// iframes aren't allowed to have child nodes.
-			filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions, depth-1)
+			filterAndRenderHTMLChildren(buf, n, parsedBaseUrl, sanitizerOptions)
 		}
 
 		buf.WriteString("</")
@@ -319,9 +272,9 @@ func filterAndRenderHTML(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.
 	return nil
 }
 
-func filterAndRenderHTMLChildren(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.URL, sanitizerOptions *SanitizerOptions, depth uint) error {
+func filterAndRenderHTMLChildren(buf *strings.Builder, n *html.Node, parsedBaseUrl *url.URL, sanitizerOptions *SanitizerOptions) error {
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if err := filterAndRenderHTML(buf, c, parsedBaseUrl, sanitizerOptions, depth); err != nil {
+		if err := filterAndRenderHTML(buf, c, parsedBaseUrl, sanitizerOptions); err != nil {
 			return err
 		}
 	}
@@ -338,15 +291,6 @@ func hasRequiredAttributes(s *mandatoryAttributesStruct, tagName string) bool {
 		return s.src || s.srcset
 	}
 	return true
-}
-
-func hasValidURIScheme(absoluteURL string) bool {
-	for _, scheme := range validURISchemes {
-		if strings.HasPrefix(absoluteURL, scheme) {
-			return true
-		}
-	}
-	return false
 }
 
 func isBlockedResource(absoluteURL string) bool {
@@ -494,7 +438,20 @@ func trackAttributes(s *mandatoryAttributesStruct, attributeName string) {
 }
 
 func sanitizeAttributes(parsedBaseUrl *url.URL, tagName string, attributes []html.Attribute, sanitizerOptions *SanitizerOptions) (string, bool) {
-	htmlAttrs := make([]string, 0, len(attributes))
+	var htmlAttrs strings.Builder
+	// Rough estimate: most attributes are short; ~24 bytes (key + ="value") is
+	// a reasonable starting point. Avoids early grows for typical elements.
+	htmlAttrs.Grow(len(attributes) * 24)
+
+	// writeAttr appends key="value" to htmlAttrs, prefixing with a single
+	// space when not the first written attribute. value is HTML-escaped.
+	writeAttr := func(key, value string) {
+		htmlAttrs.WriteByte(' ')
+		htmlAttrs.WriteString(key)
+		htmlAttrs.WriteString(`="`)
+		htmlAttrs.WriteString(html.EscapeString(value))
+		htmlAttrs.WriteByte('"')
+	}
 
 	// Keep track of mandatory attributes for some tags
 	mandatoryAttributes := mandatoryAttributesStruct{false, false, false}
@@ -515,9 +472,7 @@ func sanitizeAttributes(parsedBaseUrl *url.URL, tagName string, attributes []htm
 		switch tagName {
 		case "math":
 			if attribute.Key == "xmlns" {
-				if value != "http://www.w3.org/1998/Math/MathML" {
-					value = "http://www.w3.org/1998/Math/MathML"
-				}
+				value = "http://www.w3.org/1998/Math/MathML"
 			}
 		case "img":
 			switch attribute.Key {
@@ -577,20 +532,24 @@ func sanitizeAttributes(parsedBaseUrl *url.URL, tagName string, attributes []htm
 					continue
 				}
 
-				if !hasValidURIScheme(value) {
+				if !HasValidURIScheme(value) {
 					continue
 				}
 
-				// TODO use feedURL instead of baseURL twice.
-				parsedValueUrl, _ := url.Parse(value)
-				if cleanedURL, err := urlcleaner.RemoveTrackingParameters(parsedBaseUrl, parsedBaseUrl, parsedValueUrl); err == nil {
-					value = cleanedURL
+				// Skip the parse + RemoveTrackingParameters round trip when there
+				// is no query string to clean, which is common for <img>.
+				if strings.IndexByte(value, '?') >= 0 {
+					parsedValueUrl, _ := url.Parse(value)
+					// TODO use feedURL instead of baseURL twice.
+					if cleanedURL, err := urlcleaner.RemoveTrackingParameters(parsedBaseUrl, parsedBaseUrl, parsedValueUrl); err == nil {
+						value = cleanedURL
+					}
 				}
 			}
 		}
 
 		trackAttributes(&mandatoryAttributes, attribute.Key)
-		htmlAttrs = append(htmlAttrs, attribute.Key+`="`+html.EscapeString(value)+`"`)
+		writeAttr(attribute.Key, value)
 	}
 
 	if !hasRequiredAttributes(&mandatoryAttributes, tagName) {
@@ -600,27 +559,29 @@ func sanitizeAttributes(parsedBaseUrl *url.URL, tagName string, attributes []htm
 	if !isAnchorLink {
 		switch tagName {
 		case "a":
-			htmlAttrs = append(htmlAttrs, `rel="noopener noreferrer"`, `referrerpolicy="no-referrer"`)
+			writeAttr("rel", "noopener noreferrer")
+			writeAttr("referrerpolicy", "no-referrer")
 			if sanitizerOptions.OpenLinksInNewTab {
-				htmlAttrs = append(htmlAttrs, `target="_blank"`)
+				writeAttr("target", "_blank")
 			}
 		case "video", "audio":
-			htmlAttrs = append(htmlAttrs, "controls")
+			htmlAttrs.WriteString(" controls")
 		case "iframe":
-			htmlAttrs = append(htmlAttrs, `sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"`, `loading="lazy"`)
+			writeAttr("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox")
+			writeAttr("loading", "lazy")
 
 			// Note: the referrerpolicy seems to be required to avoid YouTube error 153 video player configuration error
 			// See https://developers.google.com/youtube/terms/required-minimum-functionality#embedded-player-api-client-identity
 			if isYouTubeEmbed {
-				htmlAttrs = append(htmlAttrs, `referrerpolicy="strict-origin-when-cross-origin"`)
+				writeAttr("referrerpolicy", "strict-origin-when-cross-origin")
 			}
 
 		case "img":
-			htmlAttrs = append(htmlAttrs, `loading="lazy"`)
+			writeAttr("loading", "lazy")
 		}
 	}
 
-	return strings.Join(htmlAttrs, " "), true
+	return strings.TrimLeft(htmlAttrs.String(), " "), true
 }
 
 func sanitizeSrcsetAttr(parsedBaseURL *url.URL, value string) string {
@@ -637,7 +598,7 @@ func sanitizeSrcsetAttr(parsedBaseURL *url.URL, value string) string {
 			continue
 		}
 
-		if !hasValidURIScheme(absoluteURL) || isBlockedResource(absoluteURL) {
+		if !HasValidURIScheme(absoluteURL) || isBlockedResource(absoluteURL) {
 			continue
 		}
 

@@ -14,11 +14,12 @@ on:
       - '.github/workflows/rpm_packages.yml'
 jobs:
   test-package:
-    if: github.event_name == 'schedule' || github.event_name == 'pull_request'
+    if: (github.event_name == 'schedule' && github.repository_owner == 'miniflux')
+      || github.event_name == 'pull_request'
     name: Test Packages
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
           fetch-depth: 0
     - name: Build RPM Package
@@ -30,24 +31,24 @@ jobs:
     name: Build Packages Manually
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
           fetch-depth: 0
     - name: Build RPM Package
       run: make rpm
     - name: Upload package
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: packages
         path: "*.rpm"
         if-no-files-found: error
         retention-days: 3
   publish-package:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.repository_owner == 'miniflux'
     name: Publish Packages
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       with:
           fetch-depth: 0
     - name: Build RPM Package

@@ -76,14 +76,13 @@ func (h *handler) refreshFeedHandler(w http.ResponseWriter, r *http.Request) {
 func (h *handler) refreshAllFeedsHandler(w http.ResponseWriter, r *http.Request) {
 	userID := request.UserID(r)
 
-	batchBuilder := h.store.NewBatchBuilder()
-	batchBuilder.WithErrorLimit(config.Opts.PollingParsingErrorLimit())
-	batchBuilder.WithoutDisabledFeeds()
-	batchBuilder.WithNextCheckExpired()
-	batchBuilder.WithUserID(userID)
-	batchBuilder.WithLimitPerHost(config.Opts.PollingLimitPerHost())
-
-	jobs, err := batchBuilder.FetchJobs()
+	jobs, err := h.store.NewBatchBuilder().
+		WithErrorLimit(config.Opts.PollingParsingErrorLimit()).
+		WithoutDisabledFeeds().
+		WithNextCheckExpired().
+		WithUserID(userID).
+		WithLimitPerHost(config.Opts.PollingLimitPerHost()).
+		FetchJobs()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
@@ -116,7 +115,7 @@ func (h *handler) updateFeedHandler(w http.ResponseWriter, r *http.Request) {
 	userID := request.UserID(r)
 	originalFeed, err := h.store.FeedByID(userID, feedID)
 	if err != nil {
-		response.JSONNotFound(w, r)
+		response.JSONServerError(w, r, err)
 		return
 	}
 

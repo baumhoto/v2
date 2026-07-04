@@ -1687,7 +1687,7 @@ func TestParseEntryWithMediaContent(t *testing.T) {
 	if len(feed.Entries) != 1 {
 		t.Fatalf("Incorrect number of entries, got: %d", len(feed.Entries))
 	}
-	if len(feed.Entries[0].Enclosures) != 4 {
+	if len(feed.Entries[0].Enclosures) != 3 {
 		t.Fatalf("Incorrect number of enclosures, got: %d", len(feed.Entries[0].Enclosures))
 	}
 
@@ -1696,7 +1696,6 @@ func TestParseEntryWithMediaContent(t *testing.T) {
 		mimeType string
 		size     int64
 	}{
-		{"https://example.org/thumbnail.jpg", "image/*", 0},
 		{"https://example.org/thumbnail.jpg", "image/*", 0},
 		{"https://example.org/media1.jpg", "image/*", 0},
 		{"https://example.org/media2.jpg", "image/*", 0},
@@ -2177,5 +2176,261 @@ func TestParseFeedWithIncorrectTTLValue(t *testing.T) {
 
 	if feed.TTL != 0 {
 		t.Errorf("Incorrect TTL, got: %d", feed.TTL)
+	}
+}
+
+func TestParseEntriesWithDuplicateGUIDAndDistinctLinks(t *testing.T) {
+	// Some non-conformant feeds (e.g. fluentboards.com) ship the same <guid>
+	// for every item. The first occurrence must keep the historical
+	// SHA256(guid) hash so previously stored entries still match, while later
+	// duplicates are disambiguated using the entry URL.
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<link>https://example.org/</link>
+			<item>
+				<title>Item A</title>
+				<link>https://example.org/a</link>
+				<guid isPermaLink="false">dup-guid</guid>
+			</item>
+			<item>
+				<title>Item B</title>
+				<link>https://example.org/b</link>
+				<guid isPermaLink="false">dup-guid</guid>
+			</item>
+			<item>
+				<title>Item C</title>
+				<link>https://example.org/a</link>
+				<guid isPermaLink="false">dup-guid</guid>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(feed.Entries) != 3 {
+		t.Fatalf("Incorrect number of entries, got: %d", len(feed.Entries))
+	}
+
+	expected := []string{
+		"22561495b53d916c228504600fda7c06cefc55a80395bbdf007102a6e9070d3f", // SHA256("dup-guid")
+		"3479bd288c08f8d2f8e992aa511a267ee50b18e22a4c475a4862c15c4d4f675b", // SHA256("dup-guid|https://example.org/b")
+		"8e4bb51d800e7a0db6b81b48d09af4711f8a25e00d09251e3d9f675e02bfe11e", // SHA256("dup-guid|https://example.org/a")
+	}
+	for i, want := range expected {
+		if feed.Entries[i].Hash != want {
+			t.Errorf("Entry %d: incorrect hash, got: %s, want: %s", i, feed.Entries[i].Hash, want)
+		}
+	}
+
+	// Sanity-check uniqueness across all three entries.
+	seen := make(map[string]bool)
+	for _, e := range feed.Entries {
+		if seen[e.Hash] {
+			t.Errorf("Duplicate hash across entries: %s", e.Hash)
+		}
+		seen[e.Hash] = true
+	}
+}
+
+func TestParseEntriesWithDuplicateGUIDAndNoLink(t *testing.T) {
+	// When colliding entries also lack a usable URL, we fall back to the
+	// position-based disambiguator. The site URL is used as the entry URL
+	// fallback (see findEntryURL handling), so the second entry hashes
+	// against that URL rather than the position.
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<link>https://example.org/</link>
+			<item>
+				<title>Item A</title>
+				<guid isPermaLink="false">dup-guid</guid>
+			</item>
+			<item>
+				<title>Item B</title>
+				<guid isPermaLink="false">dup-guid</guid>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(feed.Entries) != 2 {
+		t.Fatalf("Incorrect number of entries, got: %d", len(feed.Entries))
+	}
+
+	if feed.Entries[0].Hash != "22561495b53d916c228504600fda7c06cefc55a80395bbdf007102a6e9070d3f" {
+		t.Errorf("Entry 0: incorrect hash, got: %s", feed.Entries[0].Hash)
+	}
+	// Both items fall back to the channel link as their URL, so the second
+	// hash uses "dup-guid|https://example.org/".
+	if feed.Entries[1].Hash != "175d6d57a61533fb553c5d9bc3d52aa9092553a7e0ae473e3536c32c87cfa418" {
+		t.Errorf("Entry 1: incorrect hash, got: %s", feed.Entries[1].Hash)
+	}
+	if feed.Entries[0].Hash == feed.Entries[1].Hash {
+		t.Errorf("Hashes should differ for duplicate-GUID items")
+	}
+}
+
+func TestParseEntriesWithUniqueGUIDsAreUnchanged(t *testing.T) {
+	// Regression guard: feeds with unique GUIDs must keep the historical
+	// SHA256(guid) hashing so existing stored entries are not duplicated.
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<link>https://example.org/</link>
+			<item>
+				<title>Item A</title>
+				<link>https://example.org/a</link>
+				<guid isPermaLink="false">guid-a</guid>
+			</item>
+			<item>
+				<title>Item B</title>
+				<link>https://example.org/b</link>
+				<guid isPermaLink="false">guid-b</guid>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(feed.Entries) != 2 {
+		t.Fatalf("Incorrect number of entries, got: %d", len(feed.Entries))
+	}
+
+	if feed.Entries[0].Hash != "2b13a8de1741fb778d7e733e7a888088cb578d22e5ec6d40e0a88f82d4829cbd" {
+		t.Errorf("Entry 0: incorrect hash, got: %s", feed.Entries[0].Hash)
+	}
+	if feed.Entries[1].Hash != "33ce1b8657a81c6a49590313a36325e44683f27229e96faa690f9dc7b2a75d2a" {
+		t.Errorf("Entry 1: incorrect hash, got: %s", feed.Entries[1].Hash)
+	}
+}
+
+func TestParseFeedWithLanguage(t *testing.T) {
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<title>Example</title>
+			<link>https://example.org/</link>
+			<language>en-US</language>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feed.Language != "en-us" {
+		t.Errorf("Incorrect language, got: %q", feed.Language)
+	}
+}
+
+func TestParseFeedWithoutLanguage(t *testing.T) {
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<title>Example</title>
+			<link>https://example.org/</link>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feed.Language != "" {
+		t.Errorf("Expected empty language, got: %q", feed.Language)
+	}
+}
+
+func TestParseItemWithDublinCoreLanguage(t *testing.T) {
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+		<channel>
+			<title>Example</title>
+			<link>https://example.org/</link>
+			<language>en-US</language>
+			<item>
+				<title>Item</title>
+				<link>https://example.org/item</link>
+				<dc:language>fr-FR</dc:language>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(feed.Entries) != 1 {
+		t.Fatalf("Expected 1 entry, got: %d", len(feed.Entries))
+	}
+
+	if feed.Entries[0].Language != "fr-fr" {
+		t.Errorf("Incorrect entry language, got: %q", feed.Entries[0].Language)
+	}
+}
+
+func TestParseFeedWithDublinCoreChannelLanguage(t *testing.T) {
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+		<channel>
+			<title>Example</title>
+			<link>https://example.org/</link>
+			<dc:language>fr-FR</dc:language>
+			<item>
+				<title>Item</title>
+				<link>https://example.org/item</link>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if feed.Language != "fr-fr" {
+		t.Errorf("Incorrect feed language, got: %q", feed.Language)
+	}
+}
+
+func TestParseItemWithoutDublinCoreLanguageInheritsChannelLanguage(t *testing.T) {
+	data := `<?xml version="1.0" encoding="utf-8"?>
+		<rss version="2.0">
+		<channel>
+			<title>Example</title>
+			<link>https://example.org/</link>
+			<language>en-US</language>
+			<item>
+				<title>Item</title>
+				<link>https://example.org/item</link>
+			</item>
+		</channel>
+		</rss>`
+
+	feed, err := Parse("https://example.org/", bytes.NewReader([]byte(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(feed.Entries) != 1 {
+		t.Fatalf("Expected 1 entry, got: %d", len(feed.Entries))
+	}
+
+	if feed.Entries[0].Language != "en-us" {
+		t.Errorf("Expected entry to inherit channel language, got: %q", feed.Entries[0].Language)
 	}
 }

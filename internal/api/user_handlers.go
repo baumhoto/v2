@@ -6,6 +6,7 @@ package api // import "miniflux.app/v2/internal/api"
 import (
 	json_parser "encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"miniflux.app/v2/internal/http/request"
@@ -18,6 +19,11 @@ func (h *handler) currentUserHandler(w http.ResponseWriter, r *http.Request) {
 	user, err := h.store.UserByID(request.UserID(r))
 	if err != nil {
 		response.JSONServerError(w, r, err)
+		return
+	}
+
+	if user == nil {
+		response.JSONNotFound(w, r)
 		return
 	}
 
@@ -112,7 +118,13 @@ func (h *handler) markUserAsReadHandler(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := h.store.UserByID(userID); err != nil {
+	user, err := h.store.UserByID(userID)
+	if err != nil {
+		response.JSONServerError(w, r, err)
+		return
+	}
+
+	if user == nil {
 		response.JSONNotFound(w, r)
 		return
 	}
@@ -127,7 +139,13 @@ func (h *handler) markUserAsReadHandler(w http.ResponseWriter, r *http.Request) 
 
 func (h *handler) getIntegrationsStatusHandler(w http.ResponseWriter, r *http.Request) {
 	userID := request.UserID(r)
-	if _, err := h.store.UserByID(userID); err != nil {
+	user, err := h.store.UserByID(userID)
+	if err != nil {
+		response.JSONServerError(w, r, err)
+		return
+	}
+
+	if user == nil {
 		response.JSONNotFound(w, r)
 		return
 	}
@@ -180,7 +198,7 @@ func (h *handler) userByIDHandler(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.store.UserByID(userID)
 	if err != nil {
-		response.JSONBadRequest(w, r, errors.New("unable to fetch this user from the database"))
+		response.JSONServerError(w, r, err)
 		return
 	}
 
@@ -202,7 +220,7 @@ func (h *handler) userByUsernameHandler(w http.ResponseWriter, r *http.Request) 
 	username := request.RouteStringParam(r, "username")
 	user, err := h.store.UserByUsername(username)
 	if err != nil {
-		response.JSONBadRequest(w, r, errors.New("unable to fetch this user from the database"))
+		response.JSONServerError(w, r, err)
 		return
 	}
 
@@ -242,6 +260,13 @@ func (h *handler) removeUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.store.RemoveUserAsync(user.ID)
+	go func() {
+		if err := h.store.RemoveUser(user.ID); err != nil {
+			slog.Error("Unable to delete user",
+				slog.Int64("user_id", user.ID),
+				slog.Any("error", err),
+			)
+		}
+	}()
 	response.NoContent(w, r)
 }

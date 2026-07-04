@@ -11,10 +11,17 @@ import (
 const (
 	EntryStatusUnread       = "unread"
 	EntryStatusRead         = "read"
-	EntryStatusRemoved      = "removed"
 	DefaultSortingOrder     = "published_at"
 	DefaultSortingDirection = "asc"
 )
+
+// MaxEntryLimit is the maximum allowed value for the "limit" query parameter
+// and for the user "entries_per_page" preference.
+const MaxEntryLimit = 1000
+
+// MaxEntryIDsLimit is the maximum allowed value for the "limit" query parameter
+// for the entry ID list endpoints.
+const MaxEntryIDsLimit = 10000
 
 // Entry represents a feed item in the system.
 type Entry struct {
@@ -26,6 +33,7 @@ type Entry struct {
 	Title       string        `json:"title"`
 	URL         string        `json:"url"`
 	CommentsURL string        `json:"comments_url"`
+	Language    string        `json:"language"`
 	Date        time.Time     `json:"published_at"`
 	CreatedAt   time.Time     `json:"created_at"`
 	ChangedAt   time.Time     `json:"changed_at"`
@@ -73,6 +81,7 @@ type Entries []*Entry
 type EntriesStatusUpdateRequest struct {
 	EntryIDs []int64 `json:"entry_ids"`
 	Status   string  `json:"status"`
+	Starred  *bool   `json:"starred"`
 }
 
 // EntryUpdateRequest represents a request to update an entry.

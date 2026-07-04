@@ -584,10 +584,10 @@ function markPageAsReadAction() {
     const items = getVisibleEntries();
     if (items.length === 0) return;
 
-    const entryIDs = items.map((element) => {
-        element.classList.add("item-status-read");
-        return parseInt(element.dataset.id, 10);
-    });
+    const entryIDs = items.map((element) => parseInt(element.dataset.id, 10));
+
+    // Batch DOM writes after all reads
+    items.forEach((element) => element.classList.add("item-status-read"));
 
     updateEntriesStatus(entryIDs, "read", () => {
         const element = document.querySelector(":is(a, button)[data-action=markPageAsRead]");
@@ -664,13 +664,28 @@ function toggleEntryStatus(element, toasting) {
 /**
  * Handle the refresh of all feeds.
  *
- * This function redirects the user to the URL specified in the data-refresh-all-feeds-url attribute of the body element.
+ * This submits a real form POST to the URL specified in the data-refresh-all-feeds-url
+ * attribute of the body element, so the browser follows the redirect once and renders the
+ * server-side flash message, matching the behavior of the menu button.
  */
 function handleRefreshAllFeedsAction() {
     const refreshAllFeedsUrl = document.body.dataset.refreshAllFeedsUrl;
-    if (refreshAllFeedsUrl) {
-        window.location.href = refreshAllFeedsUrl;
+    if (!refreshAllFeedsUrl) {
+        return;
     }
+
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = refreshAllFeedsUrl;
+
+    const csrfField = document.createElement("input");
+    csrfField.type = "hidden";
+    csrfField.name = "csrf";
+    csrfField.value = document.body.dataset.csrfToken || "";
+    form.appendChild(csrfField);
+
+    document.body.appendChild(form);
+    form.submit();
 }
 
 /**
@@ -1179,7 +1194,7 @@ function initializeWebAuthn() {
 
         onClick("#webauthn-login", () => {
             abortController.abort();
-            webauthnHandler.login(usernameField.value).catch(err => WebAuthnHandler.showErrorMessage(err));
+            webauthnHandler.login().catch(err => WebAuthnHandler.showErrorMessage(err));
         });
 
         webauthnHandler.conditionalLogin(abortController).catch(err => WebAuthnHandler.showErrorMessage(err));

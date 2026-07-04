@@ -112,10 +112,20 @@ func (h *handler) markCategoryAsReadHandler(w http.ResponseWriter, r *http.Reque
 func (h *handler) getCategoriesHandler(w http.ResponseWriter, r *http.Request) {
 	var categories model.Categories
 	var err error
-	includeCounts := request.QueryStringParam(r, "counts", "false")
 
-	if includeCounts == "true" {
-		categories, err = h.store.CategoriesWithFeedCount(request.UserID(r))
+	if request.QueryBoolParam(r, "counts", false) {
+		user, userErr := h.store.UserByID(request.UserID(r))
+		if userErr != nil {
+			response.JSONServerError(w, r, userErr)
+			return
+		}
+
+		if user == nil {
+			response.JSONNotFound(w, r)
+			return
+		}
+
+		categories, err = h.store.CategoriesWithFeedCount(user.ID, user.CategoriesSortingOrder)
 	} else {
 		categories, err = h.store.Categories(request.UserID(r))
 	}
@@ -158,15 +168,14 @@ func (h *handler) refreshCategoryHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	batchBuilder := h.store.NewBatchBuilder()
-	batchBuilder.WithErrorLimit(config.Opts.PollingParsingErrorLimit())
-	batchBuilder.WithoutDisabledFeeds()
-	batchBuilder.WithUserID(userID)
-	batchBuilder.WithCategoryID(categoryID)
-	batchBuilder.WithNextCheckExpired()
-	batchBuilder.WithLimitPerHost(config.Opts.PollingLimitPerHost())
-
-	jobs, err := batchBuilder.FetchJobs()
+	jobs, err := h.store.NewBatchBuilder().
+		WithErrorLimit(config.Opts.PollingParsingErrorLimit()).
+		WithoutDisabledFeeds().
+		WithUserID(userID).
+		WithCategoryID(categoryID).
+		WithNextCheckExpired().
+		WithLimitPerHost(config.Opts.PollingLimitPerHost()).
+		FetchJobs()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return

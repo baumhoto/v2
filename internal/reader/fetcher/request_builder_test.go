@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"miniflux.app/v2/internal/config"
+	"miniflux.app/v2/internal/proxyrotator"
 )
 
 func TestNewRequestBuilder(t *testing.T) {
@@ -266,6 +267,29 @@ func TestRequestBuilder_WithoutRedirects(t *testing.T) {
 	}
 }
 
+func TestRequestBuilder_Clone(t *testing.T) {
+	original := NewRequestBuilder().WithHeader("X-Shared", "value")
+
+	clone := original.Clone().WithoutRedirects()
+	clone.WithHeader("X-Clone-Only", "value")
+
+	if original.withoutRedirects {
+		t.Error("Mutating the clone should not disable redirects on the original")
+	}
+
+	if original.headers.Get("X-Clone-Only") != "" {
+		t.Error("Mutating the clone's headers should not affect the original")
+	}
+
+	if clone.headers.Get("X-Shared") != "value" {
+		t.Error("Expected the clone to inherit the original headers")
+	}
+
+	if clone.clientTimeout != original.clientTimeout {
+		t.Error("Expected the clone to inherit the original timeout")
+	}
+}
+
 func TestRequestBuilder_DisableHTTP2(t *testing.T) {
 	builder := NewRequestBuilder()
 	builder = builder.DisableHTTP2(true)
@@ -434,6 +458,80 @@ func TestRequestBuilder_AllowPrivateNetworkWhenEnabled(t *testing.T) {
 		t.Fatalf("Expected private network request to succeed when enabled: %v", err)
 	}
 	defer resp.Body.Close()
+}
+
+func TestRequestBuilder_AllowPrivateConfiguredProxy(t *testing.T) {
+	configureFetcherAllowPrivateNetworksOption(t, "0")
+
+	tests := []struct {
+		name      string
+		configure func(t *testing.T, builder *RequestBuilder, proxyURL string) *RequestBuilder
+	}{
+		{
+			name: "feed proxy",
+			configure: func(t *testing.T, builder *RequestBuilder, proxyURL string) *RequestBuilder {
+				return builder.WithCustomFeedProxyURL(proxyURL)
+			},
+		},
+		{
+			name: "application proxy",
+			configure: func(t *testing.T, builder *RequestBuilder, proxyURL string) *RequestBuilder {
+				t.Helper()
+
+				parsedProxyURL, err := url.Parse(proxyURL)
+				if err != nil {
+					t.Fatalf("Unable to parse proxy URL: %v", err)
+				}
+
+				return builder.WithCustomApplicationProxyURL(parsedProxyURL).UseCustomApplicationProxyURL(true)
+			},
+		},
+		{
+			name: "proxy rotator",
+			configure: func(t *testing.T, builder *RequestBuilder, proxyURL string) *RequestBuilder {
+				t.Helper()
+
+				rotator, err := proxyrotator.NewProxyRotator([]string{proxyURL})
+				if err != nil {
+					t.Fatalf("Unable to create proxy rotator: %v", err)
+				}
+
+				return builder.WithProxyRotator(rotator)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			targetURL := "http://feed.invalid/rss.xml"
+			proxyRequests := make(chan string, 1)
+			proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				select {
+				case proxyRequests <- r.URL.String():
+				default:
+				}
+
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer proxyServer.Close()
+
+			builder := tt.configure(t, NewRequestBuilder(), proxyServer.URL)
+			resp, err := builder.ExecuteRequest(targetURL)
+			if err != nil {
+				t.Fatalf("Expected private proxy request to succeed: %v", err)
+			}
+			defer resp.Body.Close()
+
+			select {
+			case gotURL := <-proxyRequests:
+				if gotURL != targetURL {
+					t.Fatalf("Expected proxy request URL to be %q, got %q", targetURL, gotURL)
+				}
+			default:
+				t.Fatal("Expected request to be sent through the proxy")
+			}
+		})
+	}
 }
 
 func TestRequestBuilder_RefusePrivateNetworkOnRedirect(t *testing.T) {

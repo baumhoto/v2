@@ -19,6 +19,15 @@ func IsRelativePath(link string) bool {
 	if link == "" {
 		return false
 	}
+
+	// Reject backslashes: Go's url.Parse treats them as ordinary path
+	// characters, but browsers normalize them to forward slashes, so a target
+	// like "/\evil.com" would parse as relative here yet redirect to
+	// //evil.com in the browser (open redirect).
+	if strings.Contains(link, "\\") {
+		return false
+	}
+
 	if parsedURL, err := url.Parse(link); err == nil {
 		// Only allow relative paths (not scheme-relative URLs like //example.org)
 		// and ensure the URL doesn't have a host component
@@ -34,6 +43,11 @@ func hasHTTPPrefix(inputURL string) bool {
 	return strings.HasPrefix(inputURL, "https://") || strings.HasPrefix(inputURL, "http://")
 }
 
+// hasSOCKSPrefix reports whether the URL string begins with an SOCKS5 or SOCKS5H scheme.
+func hasSOCKSPrefix(inputURL string) bool {
+	return strings.HasPrefix(inputURL, "socks5://") || strings.HasPrefix(inputURL, "socks5h://")
+}
+
 // IsAbsoluteURL reports whether the link is absolute and starts with an HTTP or HTTPS scheme.
 func IsAbsoluteURL(inputURL string) bool {
 	if !hasHTTPPrefix(inputURL) {
@@ -44,6 +58,18 @@ func IsAbsoluteURL(inputURL string) bool {
 		return false
 	}
 	return parsedURL.IsAbs()
+}
+
+// IsValidProxyURL reports whether the url is absolute, has a host and starts with an HTTP, HTTPS, SOCKS5 or SOCKS5H scheme.
+func IsValidProxyURL(inputURL string) bool {
+	if !hasHTTPPrefix(inputURL) && !hasSOCKSPrefix(inputURL) {
+		return false
+	}
+	parsedURL, err := url.Parse(inputURL)
+	if err != nil {
+		return false
+	}
+	return parsedURL.IsAbs() && parsedURL.Host != ""
 }
 
 // resolveToAbsoluteURL resolves a relative URL using a base URL, parsing the base only if needed.
@@ -142,11 +168,6 @@ func JoinBaseURLAndPath(baseURL, path string) (string, error) {
 
 	if path == "" {
 		return "", errors.New("empty path")
-	}
-
-	_, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
 
 	finalURL, err := url.JoinPath(baseURL, path)

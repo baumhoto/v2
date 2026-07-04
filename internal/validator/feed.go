@@ -36,7 +36,19 @@ func ValidateFeedCreation(store *storage.Storage, userID int64, request *model.F
 		return locale.NewLocalizedError("error.feed_invalid_keeplist_rule")
 	}
 
-	if request.ProxyURL != "" && !urllib.IsAbsoluteURL(request.ProxyURL) {
+	if request.BlockFilterEntryRules != "" {
+		if err := IsValidFilterRules(request.BlockFilterEntryRules, "block"); err != nil {
+			return err
+		}
+	}
+
+	if request.KeepFilterEntryRules != "" {
+		if err := IsValidFilterRules(request.KeepFilterEntryRules, "keep"); err != nil {
+			return err
+		}
+	}
+
+	if request.ProxyURL != "" && !urllib.IsValidProxyURL(request.ProxyURL) {
 		return locale.NewLocalizedError("error.invalid_feed_proxy_url")
 	}
 
@@ -93,12 +105,24 @@ func ValidateFeedModification(store *storage.Storage, userID, feedID int64, requ
 		}
 	}
 
+	if request.BlockFilterEntryRules != nil && *request.BlockFilterEntryRules != "" {
+		if err := IsValidFilterRules(*request.BlockFilterEntryRules, "block"); err != nil {
+			return err
+		}
+	}
+
+	if request.KeepFilterEntryRules != nil && *request.KeepFilterEntryRules != "" {
+		if err := IsValidFilterRules(*request.KeepFilterEntryRules, "keep"); err != nil {
+			return err
+		}
+	}
+
 	if request.ProxyURL != nil {
 		if *request.ProxyURL == "" {
 			return locale.NewLocalizedError("error.proxy_url_not_empty")
 		}
 
-		if !urllib.IsAbsoluteURL(*request.ProxyURL) {
+		if !urllib.IsValidProxyURL(*request.ProxyURL) {
 			return locale.NewLocalizedError("error.invalid_feed_proxy_url")
 		}
 	}

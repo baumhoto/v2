@@ -9,7 +9,6 @@ import (
 	"miniflux.app/v2/internal/http/request"
 	"miniflux.app/v2/internal/http/response"
 	"miniflux.app/v2/internal/model"
-	"miniflux.app/v2/internal/ui/session"
 	"miniflux.app/v2/internal/ui/view"
 )
 
@@ -21,41 +20,47 @@ func (h *handler) showUnreadPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offset := request.QueryIntParam(r, "offset", 0)
-	builder := h.store.NewEntryQueryBuilder(user.ID)
-	builder.WithStatus(model.EntryStatusUnread)
-	builder.WithGloballyVisible()
-	countUnread, err := builder.CountEntries()
+
+	entries, countUnread, err := h.store.NewEntryQueryBuilder(user.ID).
+		WithStatuses(model.EntryStatusUnread).
+		WithSorting(user.EntryOrder, user.EntryDirection).
+		WithSorting("id", user.EntryDirection).
+		WithOffset(offset).
+		WithLimit(user.EntriesPerPage).
+		WithGloballyVisible().
+		WithoutContent().
+		GetEntriesWithCount()
 	if err != nil {
 		response.HTMLServerError(w, r, err)
 		return
 	}
 
-	if offset >= countUnread {
+	if offset >= countUnread && countUnread > 0 {
 		offset = 0
+
+		entries, countUnread, err = h.store.NewEntryQueryBuilder(user.ID).
+			WithStatuses(model.EntryStatusUnread).
+			WithSorting(user.EntryOrder, user.EntryDirection).
+			WithSorting("id", user.EntryDirection).
+			WithLimit(user.EntriesPerPage).
+			WithGloballyVisible().
+			WithoutContent().
+			GetEntriesWithCount()
+		if err != nil {
+			response.HTMLServerError(w, r, err)
+			return
+		}
 	}
 
-	builder = h.store.NewEntryQueryBuilder(user.ID)
-	builder.WithStatus(model.EntryStatusUnread)
-	builder.WithSorting(user.EntryOrder, user.EntryDirection)
-	builder.WithSorting("id", user.EntryDirection)
-	builder.WithOffset(offset)
-	builder.WithLimit(user.EntriesPerPage)
-	builder.WithGloballyVisible()
-	entries, err := builder.GetEntries()
-	if err != nil {
-		response.HTMLServerError(w, r, err)
-		return
-	}
-
-	sess := session.New(h.store, request.SessionID(r))
-	view := view.New(h.tpl, r, sess)
+	view := view.New(h.tpl, r)
 	view.Set("entries", entries)
 	view.Set("pagination", getPagination(h.routePath("/unread"), countUnread, offset, user.EntriesPerPage))
 	view.Set("menu", "unread")
 	view.Set("user", user)
+	navMetadata, _ := h.store.GetNavMetadata(user.ID)
 	view.Set("countUnread", countUnread)
-	view.Set("countErrorFeeds", h.store.CountUserFeedsWithErrors(user.ID))
-	view.Set("hasSaveEntry", h.store.HasSaveEntry(user.ID))
+	view.Set("countErrorFeeds", navMetadata.CountErrorFeeds)
+	view.Set("hasSaveEntry", navMetadata.HasSaveEntry)
 
 	response.HTML(w, r, view.Render("unread_entries"))
 }

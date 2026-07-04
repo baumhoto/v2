@@ -236,26 +236,24 @@ func (h *greaderHandler) editTagHandler(w http.ResponseWriter, r *http.Request) 
 		slog.Any("tags", tags),
 	)
 
-	builder := h.store.NewEntryQueryBuilder(userID)
-	builder.WithEntryIDs(itemIDs)
-	builder.WithoutStatus(model.EntryStatusRemoved)
-
-	entries, err := builder.GetEntries()
+	entries, err := h.store.NewEntryQueryBuilder(userID).
+		WithEntryIDs(itemIDs...).
+		GetEntries()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
 	}
 
 	n := 0
-	readEntryIDs := make([]int64, 0)
-	unreadEntryIDs := make([]int64, 0)
-	starredEntryIDs := make([]int64, 0)
-	unstarredEntryIDs := make([]int64, 0)
+	var readEntryIDs []int64
+	var unreadEntryIDs []int64
+	var starredEntryIDs []int64
+	var unstarredEntryIDs []int64
 	for _, entry := range entries {
 		if read, exists := tags[ReadStream]; exists {
 			if read && entry.Status == model.EntryStatusUnread {
 				readEntryIDs = append(readEntryIDs, entry.ID)
-			} else if entry.Status == model.EntryStatusRead {
+			} else if !read && entry.Status == model.EntryStatusRead {
 				unreadEntryIDs = append(unreadEntryIDs, entry.ID)
 			}
 		}
@@ -265,7 +263,7 @@ func (h *greaderHandler) editTagHandler(w http.ResponseWriter, r *http.Request) 
 				// filter the original array
 				entries[n] = entry
 				n++
-			} else if entry.Starred {
+			} else if !starred && entry.Starred {
 				unstarredEntryIDs = append(unstarredEntryIDs, entry.ID)
 			}
 		}
@@ -344,9 +342,10 @@ func (h *greaderHandler) quickAddHandler(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	requestBuilder := fetcher.NewRequestBuilder()
-	requestBuilder.WithTimeout(config.Opts.HTTPClientTimeout())
-	requestBuilder.WithProxyRotator(proxyrotator.ProxyRotatorInstance)
+	requestBuilder := fetcher.NewRequestBuilder().
+		WithTimeout(config.Opts.HTTPClientTimeout()).
+		WithProxyRotator(proxyrotator.ProxyRotatorInstance).
+		WithUserAgent("", config.Opts.HTTPClientUserAgent())
 
 	var rssBridgeURL string
 	var rssBridgeToken string
@@ -650,13 +649,11 @@ func (h *greaderHandler) streamItemContentsHandler(w http.ResponseWriter, r *htt
 		slog.Any("item_ids", itemIDs),
 	)
 
-	builder := h.store.NewEntryQueryBuilder(userID)
-	builder.WithEnclosures()
-	builder.WithoutStatus(model.EntryStatusRemoved)
-	builder.WithEntryIDs(itemIDs)
-	builder.WithSorting(model.DefaultSortingOrder, requestModifiers.SortDirection)
-
-	entries, err := builder.GetEntries()
+	entries, err := h.store.NewEntryQueryBuilder(userID).
+		WithEnclosures().
+		WithEntryIDs(itemIDs...).
+		WithSorting(model.DefaultSortingOrder, requestModifiers.SortDirection).
+		GetEntries()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
@@ -1014,11 +1011,15 @@ func (h *greaderHandler) handleReadingListStreamHandler(w http.ResponseWriter, r
 		slog.String("user_agent", r.UserAgent()),
 	)
 
-	builder := h.store.NewEntryQueryBuilder(rm.UserID)
+	builder := h.store.NewEntryQueryBuilder(rm.UserID).
+		WithLimit(rm.Count).
+		WithOffset(rm.Offset).
+		WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+
 	for _, s := range rm.ExcludeTargets {
 		switch s.Type {
 		case ReadStream:
-			builder.WithStatus(model.EntryStatusUnread)
+			builder = builder.WithStatuses(model.EntryStatusUnread)
 		default:
 			slog.Warn("[GoogleReader] Unknown ExcludeTargets filter type",
 				slog.String("handler", "handleReadingListStreamHandler"),
@@ -1029,15 +1030,12 @@ func (h *greaderHandler) handleReadingListStreamHandler(w http.ResponseWriter, r
 		}
 	}
 
-	builder.WithoutStatus(model.EntryStatusRemoved)
-	builder.WithLimit(rm.Count)
-	builder.WithOffset(rm.Offset)
-	builder.WithSorting(model.DefaultSortingOrder, rm.SortDirection)
 	if rm.StartTime > 0 {
-		builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
+		builder = builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
 	}
+
 	if rm.StopTime > 0 {
-		builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
+		builder = builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
 	}
 
 	itemRefs, continuation, err := getItemRefsAndContinuation(*builder, rm)
@@ -1049,38 +1047,42 @@ func (h *greaderHandler) handleReadingListStreamHandler(w http.ResponseWriter, r
 }
 
 func (h *greaderHandler) handleStarredStreamHandler(w http.ResponseWriter, r *http.Request, rm requestModifiers) {
-	builder := h.store.NewEntryQueryBuilder(rm.UserID)
-	builder.WithoutStatus(model.EntryStatusRemoved)
-	builder.WithStarred(true)
-	builder.WithLimit(rm.Count)
-	builder.WithOffset(rm.Offset)
-	builder.WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+	builder := h.store.NewEntryQueryBuilder(rm.UserID).
+		WithStarred(true).
+		WithLimit(rm.Count).
+		WithOffset(rm.Offset).
+		WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+
 	if rm.StartTime > 0 {
-		builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
+		builder = builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
 	}
+
 	if rm.StopTime > 0 {
-		builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
+		builder = builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
 	}
+
 	itemRefs, continuation, err := getItemRefsAndContinuation(*builder, rm)
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
 	}
+
 	response.JSON(w, r, streamIDResponse{itemRefs, continuation})
 }
 
 func (h *greaderHandler) handleReadStreamHandler(w http.ResponseWriter, r *http.Request, rm requestModifiers) {
-	builder := h.store.NewEntryQueryBuilder(rm.UserID)
-	builder.WithoutStatus(model.EntryStatusRemoved)
-	builder.WithStatus(model.EntryStatusRead)
-	builder.WithLimit(rm.Count)
-	builder.WithOffset(rm.Offset)
-	builder.WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+	builder := h.store.NewEntryQueryBuilder(rm.UserID).
+		WithStatuses(model.EntryStatusRead).
+		WithLimit(rm.Count).
+		WithOffset(rm.Offset).
+		WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+
 	if rm.StartTime > 0 {
-		builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
+		builder = builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
 	}
+
 	if rm.StopTime > 0 {
-		builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
+		builder = builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
 	}
 
 	itemRefs, continuation, err := getItemRefsAndContinuation(*builder, rm)
@@ -1088,6 +1090,7 @@ func (h *greaderHandler) handleReadStreamHandler(w http.ResponseWriter, r *http.
 		response.JSONServerError(w, r, err)
 		return
 	}
+
 	response.JSON(w, r, streamIDResponse{itemRefs, continuation})
 }
 
@@ -1096,7 +1099,7 @@ func getItemRefsAndContinuation(builder storage.EntryQueryBuilder, rm requestMod
 	if err != nil {
 		return nil, 0, err
 	}
-	var itemRefs = make([]itemRef, 0, len(rawEntryIDs))
+	itemRefs := make([]itemRef, 0, len(rawEntryIDs))
 	for _, entryID := range rawEntryIDs {
 		formattedID := strconv.FormatInt(entryID, 10)
 		itemRefs = append(itemRefs, itemRef{ID: formattedID})
@@ -1120,33 +1123,32 @@ func (h *greaderHandler) handleFeedStreamHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	builder := h.store.NewEntryQueryBuilder(rm.UserID)
-	builder.WithoutStatus(model.EntryStatusRemoved)
-	builder.WithFeedID(feedID)
-	builder.WithLimit(rm.Count)
-	builder.WithOffset(rm.Offset)
-	builder.WithSorting(model.DefaultSortingOrder, rm.SortDirection)
+	builder := h.store.NewEntryQueryBuilder(rm.UserID).
+		WithFeedID(feedID).
+		WithLimit(rm.Count).
+		WithOffset(rm.Offset).
+		WithSorting(model.DefaultSortingOrder, rm.SortDirection)
 
 	if rm.StartTime > 0 {
-		builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
+		builder = builder.AfterPublishedDate(time.Unix(rm.StartTime, 0))
 	}
 
 	if rm.StopTime > 0 {
-		builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
+		builder = builder.BeforePublishedDate(time.Unix(rm.StopTime, 0))
 	}
 
-	if len(rm.ExcludeTargets) > 0 {
-		for _, s := range rm.ExcludeTargets {
-			if s.Type == ReadStream {
-				builder.WithoutStatus(model.EntryStatusRead)
-			}
+	for _, s := range rm.ExcludeTargets {
+		if s.Type == ReadStream {
+			builder = builder.WithoutStatus(model.EntryStatusRead)
 		}
 	}
+
 	itemRefs, continuation, err := getItemRefsAndContinuation(*builder, rm)
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
 	}
+
 	response.JSON(w, r, streamIDResponse{itemRefs, continuation})
 }
 

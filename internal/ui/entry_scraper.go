@@ -10,20 +10,16 @@ import (
 	"miniflux.app/v2/internal/http/response"
 	"miniflux.app/v2/internal/locale"
 	"miniflux.app/v2/internal/mediaproxy"
-	"miniflux.app/v2/internal/model"
 	"miniflux.app/v2/internal/reader/processor"
-	"miniflux.app/v2/internal/storage"
 )
 
 func (h *handler) fetchContent(w http.ResponseWriter, r *http.Request) {
 	loggedUserID := request.UserID(r)
 	entryID := request.RouteInt64Param(r, "entryID")
 
-	entryBuilder := h.store.NewEntryQueryBuilder(loggedUserID)
-	entryBuilder.WithEntryID(entryID)
-	entryBuilder.WithoutStatus(model.EntryStatusRemoved)
-
-	entry, err := entryBuilder.GetEntry()
+	entry, err := h.store.NewEntryQueryBuilder(loggedUserID).
+		WithEntryIDs(entryID).
+		GetEntry()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
@@ -40,9 +36,9 @@ func (h *handler) fetchContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feedBuilder := storage.NewFeedQueryBuilder(h.store, loggedUserID)
-	feedBuilder.WithFeedID(entry.FeedID)
-	feed, err := feedBuilder.GetFeed()
+	feed, err := h.store.NewFeedQueryBuilder(loggedUserID).
+		WithFeedID(entry.FeedID).
+		GetFeed()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
@@ -72,11 +68,9 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 	loggedUserID := request.UserID(r)
 	entryID := request.RouteInt64Param(r, "entryID")
 
-	entryBuilder := h.store.NewEntryQueryBuilder(loggedUserID)
-	entryBuilder.WithEntryID(entryID)
-	entryBuilder.WithoutStatus(model.EntryStatusRemoved)
-
-	entry, err := entryBuilder.GetEntry()
+	entry, err := h.store.NewEntryQueryBuilder(loggedUserID).
+		WithEntryIDs(entryID).
+		GetEntry()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return
@@ -104,9 +98,9 @@ func (h *handler) fetchSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feedBuilder := storage.NewFeedQueryBuilder(h.store, loggedUserID)
-	feedBuilder.WithFeedID(entry.FeedID)
-	feed, err := feedBuilder.GetFeed()
+	feed, err := h.store.NewFeedQueryBuilder(loggedUserID).
+		WithFeedID(entry.FeedID).
+		GetFeed()
 	if err != nil {
 		response.JSONServerError(w, r, err)
 		return

@@ -28,6 +28,9 @@ func TestIsRelativePath(t *testing.T) {
 		"http://example.org/file.ext":  false,
 		"//example.org/file.ext":       false,
 		"//example.org":                false,
+		`/\example.org`:                false,
+		`\example.org`:                 false,
+		`path\to\file.ext`:             false,
 		"ftp://example.org/file.ext":   false,
 		"mailto:user@example.org":      false,
 		"magnet:?xt=urn:btih:example":  false,
@@ -59,6 +62,34 @@ func TestIsAbsoluteURL(t *testing.T) {
 
 	for input, expected := range scenarios {
 		actual := IsAbsoluteURL(input)
+		if actual != expected {
+			t.Errorf(`Unexpected result, got %v instead of %v for %q`, actual, expected, input)
+		}
+	}
+}
+
+func TestIsValidProxyURL(t *testing.T) {
+	scenarios := map[string]bool{
+		"http://127.0.0.1:3128":      true,
+		"http://[::1]:1055":          true,
+		"https://proxy.example.org":  true,
+		"socks5://127.0.0.1:1080":    true,
+		"socks5h://127.0.0.1:1080":   true,
+		"socks5://[::1]:1055":        true,
+		"socks5h://[::1]:1055":       true,
+		"socks5://[::1%25eno1]:1055": true,
+		"ftp://host":                 false,
+		"/relative/path":             false,
+		"invalid url":                false,
+		"http://[::1":                false,
+		"http:///var/run/socket":     false,
+		"sock:///socket.file":        false,
+		"socks5://[::1%eno1]:1055":   false,
+		"":                           false,
+	}
+
+	for input, expected := range scenarios {
+		actual := IsValidProxyURL(input)
 		if actual != expected {
 			t.Errorf(`Unexpected result, got %v instead of %v for %q`, actual, expected, input)
 		}

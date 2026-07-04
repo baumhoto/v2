@@ -99,22 +99,24 @@ func TestValidateTimezone(t *testing.T) {
 
 func TestValidateEntryDirection(t *testing.T) {
 	for _, direction := range []string{"asc", "desc"} {
-		if err := validateEntryDirection(direction); err != nil {
+		if err := ValidateDirection(direction); err != nil {
 			t.Errorf("expected valid direction %q to pass, got %v", direction, err)
 		}
 	}
 
-	if err := validateEntryDirection("sideways"); err == nil {
+	if err := ValidateDirection("sideways"); err == nil {
 		t.Error("expected invalid direction to fail")
 	}
 }
 
 func TestValidateEntriesPerPage(t *testing.T) {
-	if err := validateEntriesPerPage(1); err != nil {
-		t.Errorf("expected positive entries per page to pass, got %v", err)
+	for _, value := range []int{1, model.MaxEntryLimit} {
+		if err := validateEntriesPerPage(value); err != nil {
+			t.Errorf("expected %d to pass, got %v", value, err)
+		}
 	}
 
-	for _, value := range []int{0, -1} {
+	for _, value := range []int{0, -1, model.MaxEntryLimit + 1} {
 		if err := validateEntriesPerPage(value); err == nil {
 			t.Errorf("expected %d to fail", value)
 		}

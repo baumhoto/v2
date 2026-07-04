@@ -10,8 +10,6 @@ import (
 	"miniflux.app/v2/internal/http/request"
 	"miniflux.app/v2/internal/http/response"
 
-	"miniflux.app/v2/internal/storage"
-	"miniflux.app/v2/internal/ui/session"
 	"miniflux.app/v2/internal/ui/view"
 )
 
@@ -45,17 +43,16 @@ func (h *handler) sharedEntry(w http.ResponseWriter, r *http.Request) {
 
 	etag := shareCode
 	response.NewBuilder(w, r).WithCaching(etag, 72*time.Hour, func(b *response.Builder) {
-		builder := storage.NewAnonymousQueryBuilder(h.store)
-		builder.WithShareCode(shareCode)
+		entry, err := h.store.NewAnonymousQueryBuilder().
+			WithShareCode(shareCode).
+			GetEntry()
 
-		entry, err := builder.GetEntry()
 		if err != nil || entry == nil {
 			response.HTMLNotFound(w, r)
 			return
 		}
 
-		sess := session.New(h.store, request.SessionID(r))
-		view := view.New(h.tpl, r, sess)
+		view := view.New(h.tpl, r)
 		view.Set("entry", entry)
 
 		b.WithHeader("Content-Type", "text/html; charset=utf-8")
