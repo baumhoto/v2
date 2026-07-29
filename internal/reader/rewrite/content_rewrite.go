@@ -120,6 +120,20 @@ func ApplyContentRewriteRules(entry *model.Entry, customRewriteRules string) {
 	}
 }
 
+// HasRule reports whether a rewrite rule definition enables the given rule.
+//
+// Rewrite rules are applied in-memory by applyRule and cannot perform network
+// requests. Processors that need to fetch something to honor a rule use this to
+// detect the opt-in.
+func HasRule(rulesText, name string) bool {
+	for _, rule := range parseRules(rulesText) {
+		if rule.name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func parseRules(rulesText string) (rules []rule) {
 	scan := scanner.Scanner{Mode: scanner.ScanIdents | scanner.ScanStrings}
 	scan.Init(strings.NewReader(rulesText))

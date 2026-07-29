@@ -145,6 +145,20 @@ func ProcessFeedEntries(store *storage.Storage, feed *model.Feed, userID int64, 
 
 		rewrite.ApplyContentRewriteRules(entry, feed.RewriteRules)
 
+		// Bluesky post images are only reachable from the entry web page, so
+		// this costs one request per entry and runs only once per entry.
+		if (entryIsNew || forceRefresh) && shouldFetchBlueskyImages(feed, entry) {
+			if err := fetchBlueskyImages(requestBuilder, entry); err != nil {
+				slog.Warn("Unable to fetch Bluesky images",
+					slog.Int64("user_id", user.ID),
+					slog.String("entry_url", entry.URL),
+					slog.Int64("feed_id", feed.ID),
+					slog.String("feed_url", feed.FeedURL),
+					slog.Any("error", err),
+				)
+			}
+		}
+
 		// Re-run filters only when extracted content replaced entry.Content.
 		if contentExtractedSuccessfully && filter.IsBlockedEntry(blockRules, allowRules, feed, entry) {
 			slog.Debug("Entry is blocked by filter rules",
